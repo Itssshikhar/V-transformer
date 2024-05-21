@@ -1,6 +1,6 @@
 import math
 import torch
-from torch import nn
+from torch import clone, nn
 
 class NewGELUActivation(nn.Module):
     """
@@ -11,6 +11,7 @@ class NewGELUActivation(nn.Module):
     """
 
     def forward(self, input):
+        input = clone(input)
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
 class PatchEmbeddings(nn.Module):
@@ -52,11 +53,11 @@ class Embeddings(nn.Module):
         x = self.patch_embeddings(x)
         batch_size, _, _ = x.size()
 
-        classify_ts = self.classify_token.expand(batch_size, -1, -1)
+        classify_ts = self.classify_t.expand(batch_size, -1, -1)
 
         x = torch.cat((classify_ts, x), dim=1)
         x = x + self.position_embeddings
-        x = self.dropout(x)
+        x = self.Dropout(x)
         return x
 
 class AttentionHead(nn.Module):
@@ -85,9 +86,9 @@ class AttentionHead(nn.Module):
         #attention scores
         #softmax(Q*K.T/sqrt(head_size))*V
         attention_scores = torch.matmul(query, key.transpose(-1, -2))
-        attention_score = attention_scores / math.sqrt(self.attention_head_size)
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        attention_probs = self.Dropout(attention_probs)
+        attention_probs = self.dropout(attention_probs)
 
         #calculate the attention output
         attention_output = torch.matmul(attention_probs, value)
@@ -107,7 +108,7 @@ class MultiHeadAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         #to use bias or not in projections
-        self.qkv_bias = config["bias"]
+        self.qkv_bias = config["qkv_bias"]
         
         #Create a list of attention heads
         self.heads = nn.ModuleList([])
@@ -117,7 +118,7 @@ class MultiHeadAttention(nn.Module):
             
         #Creating a linear layer to project the attention output back to hidden size
         self.output_projection = nn.Linear(self.all_head_size, self.hidden_size)
-        self.output_dropout = nn.Dropout(config["hidden_output_prob"])
+        self.output_dropout = nn.Dropout(config["hidden_dropout_prob"])
 
     def forward(self, x, output_attentions=False):
         #Calculation attention for each attention head
@@ -166,11 +167,11 @@ class Block(nn.Module):
       attention_output, attention_probs = \
          self.attention(self.layernorm1(x), output_attentions=output_attentions)
       #skip connection
-      x += attention_output
+      x = x + attention_output
       #Feed forward network
       mlp_output = self.mlp(self.layernorm2(x))
       #skip connection
-      x += mlp_output
+      x = x + mlp_output
       #Returning the transformer's block output and the attention probabilities
       if not output_attentions:
          return(x, None)
@@ -231,3 +232,24 @@ class ViTForClassification(nn.Module):
          return(logits, None)
       else:
          return(logits, all_attentions)
+
+   def _init_weights(self, module):
+      if isinstance(module, (nn.Linear, nn.Conv2d)):
+        torch.nn.init.normal_(module.weight, mean=0.0, std=self.config["initializer_range"])
+        if module.bias is not None:
+            torch.nn.init.zeros_(module.bias)
+      elif isinstance(module, nn.LayerNorm):
+        module.bias.data.zero_()
+        module.weight.data.fill_(1.0)
+      elif isinstance(module, Embeddings):
+        module.position_embeddings.data = nn.init.trunc_normal_(
+             module.position_embeddings.data.to(torch.float32),
+             mean=0.0,
+             std=self.config["initializer_range"],
+            ).to(module.position_embeddings.dtype)
+
+        module.classify_t.data = nn.init.trunc_normal_(
+             module.classify_t.data.to(torch.float32),
+             mean=0.0,
+             std=self.config["initializer_range"],
+            ).to(module.classify_t.dtype)

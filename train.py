@@ -1,8 +1,8 @@
 import torch
-from torch import nn, optim
+from torch import autograd, clone, nn, optim, cuda
 
-from torch.utils import save_experiment, save_checkpoint
-from torch.data import prepare_data
+from utils import save_experiment, save_checkpoint
+from data import prepare_data
 from vit import ViTForClassification
 
 config = {
@@ -39,7 +39,7 @@ class Trainer:
       
       #Train the model
       for i in range(epochs):
-         train_loss = self.train_epochs[trainloader]
+         train_loss = self.train_epoch(trainloader)
          accuracy, test_loss = self.evaluate(testloader)
          train_losses.append(train_losses)
          test_losses.append(test_loss)
@@ -48,9 +48,10 @@ class Trainer:
          if save_model_every_n_epochs > 0 and (i+1) % save_model_every_n_epochs == 0 and i+1 != epochs:
             print('\tSave checkpoint at epoch', i+1)
             save_checkpoint(self.exp_name, self.model, i+1)
-      save_experiment(self.exp_name, self.model, train_losses, test_losses, accuracies)
+      save_experiment(self.exp_name, config, self.model, train_losses, test_losses, accuracies)
          
    def train_epoch(self, trainloader):
+      torch.autograd.set_detect_anomaly(True)
       self.model.train()
       total_loss = 0
       for batch in trainloader:
@@ -58,9 +59,10 @@ class Trainer:
          images, labels = batch
          self.optimizer.zero_grad()
          loss = self.loss_fn(self.model(images)[0], labels)
+         loss = clone(loss) 
          loss.backward()
          self.optimizer.step()
-         total_loss += loss.item() * len(images)
+         total_loss = total_loss + loss.item() * len(images)
       return total_loss / len(trainloader.dataset)
    
    @torch.no_grad()
@@ -76,7 +78,7 @@ class Trainer:
             logits, _ = self.model(images)
             
             loss = self.loss_fn(logits, labels)
-            total_loss += loss.items() * len(images)
+            total_loss = total_loss + loss.item() * len(images)
             
             predictions = torch.argmax(logits, dim=1)
             correct += torch.sum(predictions == labels).item()
@@ -97,13 +99,14 @@ def parse_args():
    args = parser.parse_args()
    if args.device is None:
       args.device = "cuda" if torch.cuda.is_available() else "cpu"
+   print(args.device) 
    return args
 
 def main():
     args = parse_args()
     batch_size = args.batch_size
     epochs = args.epochs
-    lr = epochs.lr
+    lr = args.lr
     device = args.device
     save_model_every_n_epochs = args.save_model_every
    
@@ -117,6 +120,5 @@ def main():
     trainer = Trainer(model, optimizer, loss_fn, args.exp_name, device=device)
     trainer.train(trainloader, testloader, epochs, save_model_every_n_epochs=save_model_every_n_epochs)
 
-"if __name__ == "__main__":
+if __name__ == "__main__":
     main()
-         
