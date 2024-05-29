@@ -1,7 +1,7 @@
 # Vision Transformer (ViT) from Scratch
 
 ## Project Description
-This project implements a Vision Transformer (ViT) from scratch using PyTorch. The Vision Transformer is a model for image classification that uses the Transformer architecture, originally designed for natural language processing, applied to image patches.
+This project implements a Vision Transformer (ViT) from scratch using PyTorch. The Vision Transformer is a model for image classification that leverages the Transformer architecture, originally designed for natural language processing, and applies it to image patches. This approach allows the model to capture long-range dependencies and global context in images more effectively than traditional convolutional neural networks (CNNs).
 
 ## Setup
 
