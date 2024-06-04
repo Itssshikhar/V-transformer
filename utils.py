@@ -14,18 +14,33 @@ def save_experiment(experiment_name, config, model, train_losses, test_losses, a
 
     #Save the config
     configfile = os.path.join(outdir, 'config.json')
-    with open(configfile, 'w') as f:
-        json.dump(config, f, sort_keys=True, indent=4)
+    try:
+        with open(configfile, 'w') as f:
+            json.dump(config, f, sort_keys=True, indent=4)
 
+    except TypeError as e:
+        print(f"Error saving config: {e}")
+        raise
+    
     #Save the metrics
     jsonfile = os.path.join(outdir, 'metrics.json')
-    with open(jsonfile, 'w') as f:
-        data = {
-            'train_losses': train_losses,
-            'test_losses': test_losses,
-            'accuracies': accuracies,
-        }
-        json.dump(data, f, sort_keys=True, indent=4)
+    data = {
+        'train_losses': train_losses,
+        'test_losses': test_losses,
+        'accuracies': accuracies,
+    }
+    
+    try:
+        with open(jsonfile, 'w') as f:
+            json.dump(data, f, sort_keys=True, indent=4)
+    except:
+        print(f"Error saving metrics: {e}")
+        for key, value in data.items():
+            try:
+                json.dumps(value)
+            except ValueError as ve:
+                print(f"Circular reference found in {key}: {ve}")
+        raise
 
     #Save the model
     save_checkpoint(experiment_name, model, "final", base_dir=base_dir)
